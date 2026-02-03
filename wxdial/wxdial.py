@@ -3,9 +3,10 @@
 import time
 import board
 import busio
-import displayio
 import digitalio
 import random
+
+from wxdial.mockmqtt import MockMQTT
 
 from .screens.hello import GreetingScreen
 from .screens.weather import WeatherScreen
@@ -14,8 +15,9 @@ from .screens.wind import WindScreen
 from .input import DialInput
 from .screens.screen import Screen
 
-from .subscribe import Router
-
+from .router import Router
+from wxdial import router
+from .mockmqtt import MockMQTT
 
 class WxDial:
     def __init__(self):
@@ -25,6 +27,16 @@ class WxDial:
         self.i2c = None
         self.touch_irq = None
         self.router = None
+
+        # Create a fake MQTT broker
+        emissions = [
+            ("weather/wind_spd", 3.0, lambda: random.uniform(0, 25)),
+            ("weather/wind_dir", 1.5, lambda: random.randint(0, 359)),
+            ("weather/tempF", 5.0, lambda: random.uniform(10, 80)),
+            ("garage/door", 10.0, lambda: random.choice(["open", "closed"])),
+        ]
+
+        self.mqtt = MockMQTT(emissions)
 
     def run(self):
         # Display
@@ -113,6 +125,13 @@ class WxDial:
                         self.display.root_group = active
                         active.on_show()
                 time.sleep(0.01)
+
+                # D) Handle any routed messages
+                topics = self.mqtt.drain_dirty()
+                if topics:
+                    for topic in topics:
+                        router.publish(topic, mqtt.get(topic))
+
 
         finally:
             if self.input:
