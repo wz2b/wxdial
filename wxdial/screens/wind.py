@@ -41,7 +41,8 @@ class WindScreen(Screen):
         # speed = payload.get("speed")
         # self.set(value=speed, meta=payload)
         # do NOT refresh here; let the screen or app refresh per frame
-        print("New speed")
+        # print("New speed")
+        pass
 
 
     @subscribe("weather/wind_dir")  # payload is dict
@@ -50,5 +51,6 @@ class WindScreen(Screen):
         # speed = payload.get("speed")
         # self.set(value=speed, meta=payload)
         # do NOT refresh here; let the screen or app refresh per frame
-        print("New direction")
+        # print("New direction")
+        pass
 

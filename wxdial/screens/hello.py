@@ -3,7 +3,7 @@
 from ..input import DialInput
 from .screen import Screen
 from adafruit_display_text import label
-from ..widgets.icon_anim import IconAnimWidget
+from ..widgets.wx_icon import WxIcon
 import time
 import os
 
@@ -11,13 +11,13 @@ class GreetingScreen(Screen):
     def __init__(self):
         super().__init__()
 
-        self.icon = IconAnimWidget(
+        self.icon = WxIcon(
             cx=120,
             cy=120,
-            t=0.25,
-            path="/wxdial/sprites/na.wxs",
-            tile_h=64,
-            tile_w=64,
+            t=0.150,
+            icon_path="/wxdial/sprites",
+            tile_h=120,
+            tile_w=120,
         )
 
         # for the image rotation test
@@ -25,13 +25,6 @@ class GreetingScreen(Screen):
 
         self.append(self.icon)
 
-        self.sprite_dir = "/wxdial/sprites"
-        self.imagelist = [
-            self.sprite_dir + "/" + f
-            for f in os.listdir(self.sprite_dir)
-            if f.lower().endswith(".wxs")
-    ]
-        self.imagelist.sort()   
 
     def on_show(self):
         print("GreetingScreen is now shown.")
@@ -41,11 +34,9 @@ class GreetingScreen(Screen):
 
     def input(self, event_type, event_value=None):
         if event_type == DialInput.CLICK:
-            print("GreetingScreen received a click event.")
-            self.n = (self.n + 1) % len(self.imagelist)
-            path = self.imagelist[self.n]
-            print("Switching to", path)
-            self.icon.set_path(path)
+            # print("GreetingScreen received a click event.")
+            self.n = (self.n + 1) % 48
+            self.icon.set_code(self.n)
             return True
         elif event_type == DialInput.CW:
             print("GreetingScreen received a clockwise rotation.")
