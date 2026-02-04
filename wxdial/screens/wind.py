@@ -6,7 +6,7 @@ from .screen import Screen
 from ..subscribe import subscribe
 from adafruit_display_text import label
 from ..widgets import WindDialWidget, SegmentedWindArrow
-
+import random
 
 class WindScreen(Screen):
     def __init__(self):
@@ -32,7 +32,15 @@ class WindScreen(Screen):
         pass;
 
     def input(self, event_type, event_value=None):
-        return False
+        if event_type == DialInput.CLICK:
+            speed=random.uniform(0, 25)
+            gust=random.uniform(0, 25)
+            dir=random.randint(0, 359)
+            self.big_gauge.set(
+                wind_dir_deg=dir,
+                wind_speed_mph=speed,
+                wind_gust_mph=gust)         
+            return True
 
     
     @subscribe("weather/wind_spd")  # payload is dict
