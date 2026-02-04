@@ -5,7 +5,6 @@ from .screen import Screen
 
 import terminalio
 from adafruit_display_text import label
-import wifi
 import vectorio
 import displayio
 
@@ -17,26 +16,10 @@ def _format_mac(mac_bytes) -> str:
     return ":".join(f"{b:02X}" for b in mac_bytes)
 
 
-def _current_ssid() -> str | None:
-    ap = wifi.radio.ap_info  # None if not connected
-    if ap is None:
-        return None
-    ssid = getattr(ap, "ssid", None)
-    if isinstance(ssid, (bytes, bytearray)):
-        ssid = ssid.decode("utf-8", "replace")
-    return ssid if isinstance(ssid, str) else None
-
-
-def _is_connected_to(ssid: str | None) -> bool:
-    if not ssid:
-        return False
-    cur = _current_ssid()
-    return (cur is not None) and (cur == ssid)
-
-
 class NetworkScreen(Screen):
-    def __init__(self):
+    def __init__(self, wifimgr=None):
         super().__init__()
+        self.wifimgr = wifimgr
 
         self._edit_mode = False
 
@@ -44,7 +27,7 @@ class NetworkScreen(Screen):
         self._edit_palette = None
         self._edit_bg = None
 
-        # 3 lines now
+        # 3 lines
         self._sel_label = None      # "Selected: <ssid>"
         self._conn_label = None     # "Connected" / "Not Connected"
         self._mac_label = None      # "MAC: .."
@@ -58,11 +41,22 @@ class NetworkScreen(Screen):
         self._sel_idx = 0
         self._selected_ssid = self._net_names[self._sel_idx] if self._net_names else None
 
+    def _current_ssid(self) -> str | None:
+        if self.wifimgr is None:
+            return None
+        return self.wifimgr.connected_ssid()
+
+    def _is_connected_to(self, ssid: str | None) -> bool:
+        if not ssid:
+            return False
+        cur = self._current_ssid()
+        return (cur is not None) and (cur == ssid)
+
     def on_show(self):
         print("NetworkScreen is now shown.")
 
         # Default selection: current SSID if known, else first
-        cur = _current_ssid()
+        cur = self._current_ssid()
         if cur and cur in KNOWN_NETWORKS and self._net_names:
             try:
                 self._sel_idx = self._net_names.index(cur)
@@ -112,7 +106,7 @@ class NetworkScreen(Screen):
             self.append(self._conn_label)
 
         if self._mac_label is None:
-            mac = _format_mac(wifi.radio.mac_address)
+            mac = self.wifimgr.mac_address_str() if self.wifimgr else "(no mac)"
             self._mac_label = label.Label(
                 terminalio.FONT,
                 text=f"MAC: {mac}",
@@ -143,13 +137,10 @@ class NetworkScreen(Screen):
         if not self._net_names or not self._selected_ssid:
             line1 = "Selected: (none)"
         else:
-            if self._edit_mode:
-                line1 = f"Select: {self._selected_ssid}"
-            else:
-                line1 = f"Selected: {self._selected_ssid}"
+            line1 = f"Select: {self._selected_ssid}" if self._edit_mode else f"Selected: {self._selected_ssid}"
 
         # Line 2: Connected/Not Connected (based on selected SSID)
-        line2 = "Connected" if _is_connected_to(self._selected_ssid) else "Not Connected"
+        line2 = "Connected" if self._is_connected_to(self._selected_ssid) else "Not Connected"
 
         if self._sel_label and (force or line1 != self._last_line1):
             self._sel_label.text = line1
@@ -169,13 +160,14 @@ class NetworkScreen(Screen):
         self._render_lines(force=True)
 
     def _save(self):
-        # Placeholder for later: actually connect / update settings
-        if self._selected_ssid:
-            cfg = KNOWN_NETWORKS.get(self._selected_ssid, {})
-            auto = cfg.get("auto_connect", False)
-            print(f"NetworkScreen: selected SSID={self._selected_ssid} auto_connect={auto}")
-        else:
+        # Commit selection to wifi manager (non-blocking: manager will attempt connection in its tick)
+        if not self._selected_ssid:
             print("NetworkScreen: no SSID selected")
+            return
+
+        print(f"NetworkScreen: set desired SSID={self._selected_ssid}")
+        if self.wifimgr:
+            self.wifimgr.set_network(self._selected_ssid)
 
     def on_hide(self):
         if self._edit_mode:
@@ -206,13 +198,11 @@ class NetworkScreen(Screen):
         return False
 
     def tick(self, now):
-        # now is time.monotonic() seconds
         if self._edit_mode:
             return
 
-        if (now - self._last_refresh) < 0.5:
+        if (now - self._last_refresh) < 2.0:
             return
         self._last_refresh = now
 
-        # Refresh connected status periodically
         self._render_lines(force=False)

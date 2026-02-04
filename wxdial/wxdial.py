@@ -6,6 +6,7 @@ import busio
 import digitalio
 import random
 
+from .wifi_mgr import WifiManager
 from wxdial.mockmqtt import MockMQTT
 
 from .screens.hello import GreetingScreen
@@ -45,6 +46,12 @@ class WxDial:
         # self.root = displayio.Group()
         # self.display.root_group = self.root
 
+
+        # WiFi Manager
+        self.wifimgr = WifiManager()
+        self.wifimgr.startup()
+        
+        # Touch IRQ
         self.touch_irq = digitalio.DigitalInOut(board.TOUCH_IRQ)
         self.touch_irq.switch_to_input(pull=digitalio.Pull.UP)
 
@@ -55,11 +62,12 @@ class WxDial:
         # Router
         self.router = Router()
 
+
         # Screens
         greeting = GreetingScreen()
         wind = WindScreen()
         weather = WeatherScreen()
-        network = NetworkScreen()
+        network = NetworkScreen(wifimgr=self.wifimgr)
 
         screens = [greeting, wind, weather, network]
 
@@ -85,6 +93,8 @@ class WxDial:
         try:
             while True:
                 now = time.monotonic()
+
+                self.wifimgr.tick(now)
 
                 # A) Emit fake weather events occasionally
                 if now >= next_emit:
