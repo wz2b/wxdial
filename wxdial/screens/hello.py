@@ -30,7 +30,8 @@ class GreetingScreen(Screen):
         print("GreetingScreen is now shown.")
 
     def on_hide(self):
-        print("GreetingScreen is now hidden.")
+        # print("GreetingScreen is now hidden.")
+        pass
 
     def input(self, event_type, event_value=None):
         if event_type == DialInput.CLICK:

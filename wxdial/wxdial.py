@@ -11,6 +11,7 @@ from wxdial.mockmqtt import MockMQTT
 from .screens.hello import GreetingScreen
 from .screens.weather import WeatherScreen
 from .screens.wind import WindScreen
+from .screens.network import NetworkScreen
 
 from .input import DialInput
 from .screens.screen import Screen
@@ -49,7 +50,7 @@ class WxDial:
 
         # Input
         self.i2c = busio.I2C(board.SCL, board.SDA, frequency=100_000)
-        self.input = DialInput(board.ENC_A, board.ENC_B, board.KNOB_BUTTON, self.i2c, self.touch_irq)
+        self.input = DialInput(board.ENC_A, board.ENC_B, board.KNOB_BUTTON, self.i2c, self.touch_irq, invert=True)
 
         # Router
         self.router = Router()
@@ -58,8 +59,9 @@ class WxDial:
         greeting = GreetingScreen()
         wind = WindScreen()
         weather = WeatherScreen()
+        network = NetworkScreen()
 
-        screens = [greeting, wind, weather]
+        screens = [greeting, wind, weather, network]
 
         # Register screens (or widgets) with router
         # If your @subscribe methods live on the Screen classes, this is enough:
@@ -100,37 +102,38 @@ class WxDial:
                 # B) Poll inputs and forward to active screen
                 ev = self.input.poll()
                 if ev:
-                    active.input(*ev)
+                    ev_type, ev_value = ev
+                    print("EV:", DialInput.event_name(ev_type), ev_value, "ACTIVE:", type(active).__name__, "IDX:", screens.index(active))
+                    
+                    handled = active.input(*ev)
 
-                # C) Tick screen
-                handled = active.tick(now)
-                if not handled:
-                    ev_type, ev_value = ev if ev else (None, None)
+                    if not handled:
+                        if ev_type == DialInput.CW:
+                            next_index = (screens.index(active) + 1) % len(screens)
 
-                    if ev_type == DialInput.CW:
-                        active.on_hide()
-                        # self.root.remove(active)
-                        next_index = (screens.index(active) + 1) % len(screens)
-                        active = screens[next_index]
-                        # self.root.append(active)
-                        self.display.root_group = active
-                        active.on_show()
+                            active.on_hide()
+                            active = screens[next_index]
+                            self.display.root_group = active
+                            active.on_show()
 
-                    elif ev_type == DialInput.CCW:
-                        active.on_hide()
-                        # self.root.remove(active)
-                        prev_index = (screens.index(active) - 1) % len(screens)
-                        active = screens[prev_index]
-                        # self.root.append(active)
-                        self.display.root_group = active
-                        active.on_show()
+                        elif ev_type == DialInput.CCW:
+                            # print("SWITCH CCW from", type(active).__name__, "to", type(screens[next_index]).__name__)
+
+                            active.on_hide()
+                            prev_index = (screens.index(active) - 1) % len(screens)
+                            active = screens[prev_index]
+                            self.display.root_group = active
+                            active.on_show()
+
+                # C) Tick screen (always)
+                active.tick(now)
                 time.sleep(0.01)
 
                 # D) Handle any routed messages
                 topics = self.mqtt.drain_dirty()
                 if topics:
                     for topic in topics:
-                        router.publish(topic, mqtt.get(topic))
+                        router.publish(topic, self.mqtt.get(topic))
 
 
         finally:
