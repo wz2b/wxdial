@@ -223,6 +223,7 @@ class WifiManager:
 
     def new_socket_pool(self):
         self._pool = socketpool.SocketPool(self._radio)
+        return self._pool
 
     def mac_address(self) -> bytes:
         return self._radio.mac_address

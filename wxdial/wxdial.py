@@ -13,6 +13,7 @@ from .screens.hello import GreetingScreen
 from .screens.weather import WeatherScreen
 from .screens.wind import WindScreen
 from .screens.network import NetworkScreen
+from .screens.windrose import WindRoseScreen
 
 from .input import DialInput
 from .screens.screen import Screen
@@ -20,6 +21,7 @@ from .screens.screen import Screen
 from .router import Router
 from wxdial import router
 from .mockmqtt import MockMQTT
+from .dialmqtt import DialMQTT
 
 class WxDial:
     def __init__(self):
@@ -38,7 +40,9 @@ class WxDial:
             ("garage/door", 10.0, lambda: random.choice(["open", "closed"])),
         ]
 
-        self.mqtt = MockMQTT(emissions)
+        self.wifimgr = WifiManager()
+
+        
 
     def run(self):
         # Display
@@ -48,8 +52,13 @@ class WxDial:
 
 
         # WiFi Manager
-        self.wifimgr = WifiManager()
         self.wifimgr.startup()
+        
+        # self.mqtt = MockMQTT(emissions)
+        self.mqtt = DialMQTT(broker="ha.autofrog.com",
+                             port=8883,
+                             client_id="wxdial",
+                             wifimgr=self.wifimgr)
         
         # Touch IRQ
         self.touch_irq = digitalio.DigitalInOut(board.TOUCH_IRQ)
@@ -64,17 +73,22 @@ class WxDial:
 
 
         # Screens
+        rose = WindRoseScreen()
         greeting = GreetingScreen()
         wind = WindScreen()
         weather = WeatherScreen()
         network = NetworkScreen(wifimgr=self.wifimgr)
 
-        screens = [greeting, wind, weather, network]
+        screens = [rose, greeting, wind, weather, network]
 
         # Register screens (or widgets) with router
         # If your @subscribe methods live on the Screen classes, this is enough:
         for s in screens:
             self.router.register(s)
+
+        # Tell the MQTT boker we're interested in these topics
+        for topic in self.router.topics():
+            self.mqtt.subscribe(topic)
 
         # If your @subscribe methods live on widgets owned by each screen,
         # register those widgets here instead (example):
@@ -82,7 +96,7 @@ class WxDial:
         #     for w in getattr(s, "widgets", []):
         #         self.router.register(w)
 
-        active = greeting
+        active = screens[0]
         # self.root.append(active)
         self.display.root_group = active
         active.on_show()
@@ -95,6 +109,7 @@ class WxDial:
                 now = time.monotonic()
 
                 self.wifimgr.tick(now)
+                self.mqtt.poll(now)
 
                 # A) Emit fake weather events occasionally
                 if now >= next_emit:
@@ -143,7 +158,7 @@ class WxDial:
                 topics = self.mqtt.drain_dirty()
                 if topics:
                     for topic in topics:
-                        router.publish(topic, self.mqtt.get(topic))
+                        self.router.publish(topic, self.mqtt.get(topic))
 
 
         finally:

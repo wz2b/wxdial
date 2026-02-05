@@ -3,6 +3,7 @@ import socketpool
 import ssl
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
 
+DEBUG_MQTT = True
 
 class DialMQTT:
     """
@@ -36,8 +37,8 @@ class DialMQTT:
         port=8883,
         client_id="wxdial",
         keep_alive=60,
-        socket_timeout=0.05,
-        loop_timeout=0.05,
+        socket_timeout=5.0,
+        loop_timeout=6.0,
         reconnect_min_s=1.0,
         reconnect_max_s=30.0,
     ):
@@ -76,7 +77,8 @@ class DialMQTT:
     # ---- MQTT callbacks ----
 
     def _on_connect(self, client, userdata, flags, rc):
-        print("MQTT connected")
+        if DEBUG_MQTT:
+            print("MQTT connected")
         self._state = self._CONNECTED
         self._reconnect_delay = self._reconnect_min_s
         self._next_attempt_at = 0.0
@@ -89,7 +91,8 @@ class DialMQTT:
                 print("MQTT resubscribe error:", topic, e)
 
     def _on_disconnect(self, client, userdata, rc):
-        print("MQTT disconnected")
+        if DEBUG_MQTT:
+            print("MQTT disconnected")
         # Don't immediately rebuild here; let poll() decide based on wifi status
         self._state = self._CONNECTING
         self._schedule_reconnect(time.monotonic())
@@ -97,9 +100,13 @@ class DialMQTT:
     def _on_message(self, client, topic, payload):
         try:
             msg = payload.decode("utf-8")
+
         except Exception:
             msg = payload
 
+        if DEBUG_MQTT:
+            print("MQTT message:", topic, "->", msg)
+            
         self._values[topic] = msg
         self._dirty.add(topic)
 
@@ -136,6 +143,8 @@ class DialMQTT:
         Must be rebuilt after every WiFi reconnect.
         """
         self._pool = self._wifimgr.new_socket_pool()
+        if self._pool is None:
+            print("No socket pool; Wi-Fi may be down")
 
         self._ssl = ssl.create_default_context()
         self._ssl.check_hostname = False
@@ -186,6 +195,7 @@ class DialMQTT:
         """
         if not topic:
             return
+
         self._subs.add(topic)
 
         if self._client is not None and self._state == self._CONNECTED:

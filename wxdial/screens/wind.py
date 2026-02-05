@@ -23,7 +23,9 @@ class WindScreen(Screen):
         #     anchored_position=(self.cx, self.cy),
         # )
         # self.append(text_area)
-        
+        self.last_speed = None
+        self.last_dir = None
+        self.last_gust = None
 
     def on_show(self):
         pass;
@@ -45,20 +47,24 @@ class WindScreen(Screen):
     
     @subscribe("weather/wind_spd")  # payload is dict
     def on_wind_speed(self, payload):
-        # payload like: {"speed": 12.3, "dir": 270, "maxGust": 22.5}
-        # speed = payload.get("speed")
-        # self.set(value=speed, meta=payload)
-        # do NOT refresh here; let the screen or app refresh per frame
-        # print("New speed")
-        pass
+        # print("New speed", payload)
+        self.last_speed = float(payload)
+        self._update_arrow()
 
 
     @subscribe("weather/wind_dir")  # payload is dict
     def on_wind_dir(self, payload):
-        # payload like: {"speed": 12.3, "dir": 270, "maxGust": 22.5}
-        # speed = payload.get("speed")
-        # self.set(value=speed, meta=payload)
-        # do NOT refresh here; let the screen or app refresh per frame
-        # print("New direction")
-        pass
+        # print("New direction", payload)
+        self.last_dir = float(payload)
+        self._update_arrow()
 
+    @subscribe("weather/wind_gust_mph")  # payload is dict
+    def on_wind_gust(self, payload):
+        # print("New gust", payload)
+        self.last_gust = float(payload)
+        self._update_arrow()
+
+    def _update_arrow(self):
+                self.big_gauge.set(wind_speed_mph=self.last_speed, 
+                        wind_dir_deg=self.last_dir,
+                        wind_gust_mph=self.last_gust)

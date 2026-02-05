@@ -85,4 +85,7 @@ class Router:
         for h in handlers:
             h(payload)
         return len(handlers)
-    
+
+    def topics(self):
+        """Return an iterable of topic strings currently registered."""
+        return self._handlers.keys()    
