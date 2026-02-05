@@ -230,3 +230,21 @@ class WifiManager:
     def mac_address_str(self) -> str:
         mac = self._radio.mac_address
         return ":".join(f"{b:02X}" for b in mac)
+
+    def ip_address(self):
+        """
+        Return the current IPv4 address in native format (ipaddress.IPv4Address),
+        or None if not connected.
+        """
+        try:
+            return self._radio.ipv4_address
+        except Exception:
+            return None
+
+    def ip_address_str(self) -> str | None:
+        """
+        Return the current IPv4 address as a dotted-quad string,
+        or None if not connected.
+        """
+        ip = self.ip_address()
+        return str(ip) if ip is not None else None

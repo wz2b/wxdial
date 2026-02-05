@@ -29,7 +29,7 @@ class NetworkScreen(Screen):
 
         # 3 lines
         self._sel_label = None      # "Selected: <ssid>"
-        self._conn_label = None     # "Connected" / "Not Connected"
+        self._conn_label = None     # "Connected <ip>" / "Not Connected"
         self._mac_label = None      # "MAC: .."
 
         self._last_line1 = None
@@ -45,6 +45,12 @@ class NetworkScreen(Screen):
         if self.wifimgr is None:
             return None
         return self.wifimgr.connected_ssid()
+
+    def _current_ip_str(self) -> str | None:
+        if self.wifimgr is None:
+            return None
+        # ip_address_str returns None if not connected
+        return self.wifimgr.ip_address_str()
 
     def _is_connected_to(self, ssid: str | None) -> bool:
         if not ssid:
@@ -140,7 +146,11 @@ class NetworkScreen(Screen):
             line1 = f"Select: {self._selected_ssid}" if self._edit_mode else f"Selected: {self._selected_ssid}"
 
         # Line 2: Connected/Not Connected (based on selected SSID)
-        line2 = "Connected" if self._is_connected_to(self._selected_ssid) else "Not Connected"
+        if self._is_connected_to(self._selected_ssid):
+            ip = self._current_ip_str()
+            line2 = f"Connected {ip}" if ip else "Connected"
+        else:
+            line2 = "Not Connected"
 
         if self._sel_label and (force or line1 != self._last_line1):
             self._sel_label.text = line1
