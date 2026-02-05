@@ -43,8 +43,9 @@ class WindRoseScreen(Screen):
         if event_type == DialInput.CLICK:
             self.rose.clear()
             self.rose.refresh(force=True)
+            return True
         
-        return True
+        return False
 
     
     @subscribe("weather/wind")
