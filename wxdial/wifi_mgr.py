@@ -20,52 +20,41 @@ def _decode_ssid(ssid):
 class WifiManager:
     """
     Small wifi service with a tick-driven state machine.
-
-    Goals:
-      - Mockable status access (no direct wifi usage in screens)
-      - Non-spammy reconnect attempts
-      - A 'desired' network that UI can set
-
-    Notes:
-      - CircuitPython wifi.radio.connect() is blocking.
-        We avoid freezing the *whole system repeatedly* by calling it
-        only on a backoff schedule.
+    
+    Auto-connects to known networks based on availability and priority.
     """
 
-    # Simple states for observability/debugging
     DISCONNECTED = "disconnected"
+    SCANNING = "scanning"
     CONNECTING = "connecting"
     CONNECTED = "connected"
     ERROR = "error"
 
-    # Perf / UX tunables
-    _STATUS_TTL_S = 0.5          # cache ap_info queries (radio can be "expensive")
-    _STARTUP_GRACE_S = 2.0       # delay first connect attempt so UI can come up
-    _CONNECT_TIMEOUT_S = 5       # best-effort; some ports ignore this
+    _STATUS_TTL_S = 0.5
+    _STARTUP_GRACE_S = 2.0
+    _CONNECT_TIMEOUT_S = 5
+    _SCAN_INTERVAL_S = 10.0  # How often to scan when disconnected
 
     def __init__(self, *, networks=None, radio=None):
         self._radio = radio if radio is not None else wifi.radio
         self._networks = networks if networks is not None else KNOWN_NETWORKS
 
-        self._desired_ssid = None
+        self._desired_ssid = None  # Can still be set manually
         self._state = self.DISCONNECTED
         self._last_error = None
 
         self._next_attempt_at = 0.0
-        self._attempt_backoff_s = 1.0  # grows up to max
+        self._attempt_backoff_s = 1.0
         self._max_backoff_s = 30.0
 
-        # Cache connected SSID to avoid hammering wifi.radio.ap_info
         self._cached_connected_ssid = None
         self._cached_at = 0.0
+        
+        self._last_scan_at = 0.0
 
-    # ---- status API (mock-friendly) ----
+    # ---- status API ----
 
     def connected_ssid(self, now: float | None = None) -> str | None:
-        """
-        Return SSID string if connected, else None.
-        Cached briefly to reduce radio load.
-        """
         if now is None:
             now = time.monotonic()
 
@@ -85,7 +74,6 @@ class WifiManager:
         return ssid
 
     def state(self) -> str:
-        # Derive CONNECTED from radio if possible (cached)
         if self.connected_ssid():
             return self.CONNECTED
         return self._state
@@ -100,44 +88,27 @@ class WifiManager:
 
     def set_network(self, ssid: str | None):
         """
-        Set the desired SSID. Does not block.
-        If ssid is None, we simply stop trying (and optionally disconnect).
+        Manually set desired SSID (overrides auto-connect).
+        Set to None to resume auto-connect behavior.
         """
         self._desired_ssid = ssid
         self._last_error = None
-
-        # Reset backoff so the change reacts quickly
         self._attempt_backoff_s = 1.0
-        self._next_attempt_at = time.monotonic()  # attempt soon (but not necessarily immediately)
-
-        # Invalidate cache so screens see updated status faster
+        self._next_attempt_at = time.monotonic()
         self._cached_at = 0.0
 
     def startup(self):
-        """
-        Decide initial desired network.
-        Prefer:
-          1) already-connected SSID (if any)
-          2) first auto_connect=True network
-          3) otherwise leave desired None
-        """
+        """Initialize and check if already connected."""
         now = time.monotonic()
 
         cur = self.connected_ssid(now)
-        if cur:
+        if cur and cur in self._networks:
             self._desired_ssid = cur
             self._state = self.CONNECTED
             self._next_attempt_at = 0.0
             return
 
-        # Find an auto_connect network
-        for ssid, cfg in self._networks.items():
-            if cfg.get("auto_connect", False):
-                self._desired_ssid = ssid
-                break
-
         self._state = self.DISCONNECTED
-        # Grace period so the UI can come up before the first blocking connect call
         self._next_attempt_at = now + self._STARTUP_GRACE_S
 
     def disconnect(self):
@@ -147,72 +118,137 @@ class WifiManager:
             pass
 
         self._state = self.DISCONNECTED
-        # Invalidate cache (ap_info may lag briefly otherwise)
         self._cached_connected_ssid = None
         self._cached_at = 0.0
+
+    # ---- scanning ----
+
+    def _scan_for_auto_networks(self) -> str | None:
+        """
+        Scan for available networks and return the best auto_connect match.
+        Priority: explicit priority field > order in dict > signal strength.
+        """
+        try:
+            # Get auto-connect candidates with priority
+            candidates = {
+                ssid: cfg 
+                for ssid, cfg in self._networks.items() 
+                if cfg.get("auto_connect", False)
+            }
+            
+            if not candidates:
+                return None
+
+            # Scan available networks
+            networks = self._radio.start_scanning_networks()
+            available = {}
+            
+            for network in networks:
+                ssid = _decode_ssid(network.ssid)
+                if ssid in candidates:
+                    # Keep strongest signal if duplicate SSID
+                    if ssid not in available or network.rssi > available[ssid]["rssi"]:
+                        available[ssid] = {
+                            "rssi": network.rssi,
+                            "priority": candidates[ssid].get("priority", 50)
+                        }
+            
+            self._radio.stop_scanning_networks()
+            
+            if not available:
+                return None
+            
+            # Sort by priority (lower number = higher priority), then signal strength
+            best = sorted(
+                available.items(),
+                key=lambda x: (x[1]["priority"], -x[1]["rssi"])
+            )[0][0]
+            
+            return best
+            
+        except Exception as e:
+            print(f"Scan error: {e}")
+            return None
 
     # ---- main loop hook ----
 
     def tick(self, now: float):
         """
-        Call this frequently (each main loop). It will attempt connection on a schedule.
+        Auto-connect state machine:
+        1. If connected, maintain connection
+        2. If manual desired_ssid set, try that
+        3. Otherwise, scan and auto-connect to best available network
         """
-        # If we're connected, keep state in sync and do nothing
         cur = self.connected_ssid(now)
+        
+        # Already connected
         if cur:
             self._state = self.CONNECTED
             self._last_error = None
 
-            # If connected to something else than desired, switch
+            # If manually set different network, disconnect and reconnect
             if self._desired_ssid and self._desired_ssid != cur:
                 self.disconnect()
                 self._state = self.DISCONNECTED
                 self._next_attempt_at = now
             return
 
-        # Not connected
-        if not self._desired_ssid:
-            self._state = self.DISCONNECTED
-            return
-
-        # Wait for the next attempt window (backoff / grace)
+        # Not connected - wait for next attempt window
         if now < self._next_attempt_at:
+            return
+
+        # Determine which network to connect to
+        target_ssid = None
+        
+        if self._desired_ssid:
+            # Manual override
+            target_ssid = self._desired_ssid
+        else:
+            # Auto-scan mode
+            if (now - self._last_scan_at) >= self._SCAN_INTERVAL_S:
+                self._state = self.SCANNING
+                target_ssid = self._scan_for_auto_networks()
+                self._last_scan_at = now
+                
+                if not target_ssid:
+                    # No auto-connect networks found
+                    self._state = self.DISCONNECTED
+                    self._schedule_backoff(now)
+                    return
+
+        if not target_ssid:
             self._state = self.DISCONNECTED
             return
 
-        # Attempt connect (blocking call, so do it sparingly)
-        cfg = self._networks.get(self._desired_ssid)
+        # Attempt connection
+        cfg = self._networks.get(target_ssid)
         if not cfg:
-            self._last_error = ValueError("Unknown SSID")
+            self._last_error = ValueError(f"Unknown SSID: {target_ssid}")
             self._state = self.ERROR
             self._schedule_backoff(now)
             return
 
         password = cfg.get("password", "")
-
         self._state = self.CONNECTING
+        
         try:
-            # Some CP builds support timeout=...; keep it optional
             try:
-                self._radio.connect(self._desired_ssid, password, timeout=self._CONNECT_TIMEOUT_S)
+                self._radio.connect(target_ssid, password, timeout=self._CONNECT_TIMEOUT_S)
             except TypeError:
-                self._radio.connect(self._desired_ssid, password)
+                self._radio.connect(target_ssid, password)
 
             # Success
             self._state = self.CONNECTED
+            self._desired_ssid = target_ssid  # Remember what we connected to
             self._last_error = None
             self._attempt_backoff_s = 1.0
             self._next_attempt_at = 0.0
-
-            # Invalidate cache so screens see connected state immediately
             self._cached_at = 0.0
 
         except Exception as e:
             self._last_error = e
             self._state = self.ERROR
             self._schedule_backoff(now)
-
-            # Invalidate cache; some failures leave ap_info in weird transient states
             self._cached_at = 0.0
 
     def _schedule_backoff(self, now: float):
@@ -233,19 +269,11 @@ class WifiManager:
         return ":".join(f"{b:02X}" for b in mac)
 
     def ip_address(self):
-        """
-        Return the current IPv4 address in native format (ipaddress.IPv4Address),
-        or None if not connected.
-        """
         try:
             return self._radio.ipv4_address
         except Exception:
             return None
 
     def ip_address_str(self) -> str | None:
-        """
-        Return the current IPv4 address as a dotted-quad string,
-        or None if not connected.
-        """
         ip = self.ip_address()
         return str(ip) if ip is not None else None

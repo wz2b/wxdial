@@ -2,8 +2,10 @@ import time
 import socketpool
 import ssl
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
+from .perf import PerfMeter
 
 DEBUG_MQTT = True
+
 
 class DialMQTT:
     """
@@ -41,6 +43,7 @@ class DialMQTT:
         loop_timeout=6.0,
         reconnect_min_s=1.0,
         reconnect_max_s=30.0,
+        stats=None
     ):
         self._wifimgr = wifimgr
         self._broker = broker
@@ -49,6 +52,7 @@ class DialMQTT:
         self._keep_alive = keep_alive
         self._socket_timeout = socket_timeout
         self._loop_timeout = loop_timeout
+        self.stats = stats
 
         # backoff / reconnect pacing
         self._reconnect_delay = reconnect_min_s
@@ -172,7 +176,8 @@ class DialMQTT:
             return
 
         try:
-            self._client.connect()
+            with PerfMeter("mqtt._client-connecting", self.stats):
+                self._client.connect()
             # on_connect callback will set CONNECTED + resubscribe
         except Exception as e:
             print("MQTT connect error:", e)
@@ -233,12 +238,13 @@ class DialMQTT:
 
         # Wi-Fi dropped -> tear down MQTT stack so it can rebuild cleanly later
         if not wifi_up:
-            if self._last_wifi_up:
-                # only print on transition
-                print("MQTT: Wi-Fi down; idling")
-            self._last_wifi_up = False
-            self._teardown_client()
-            return
+            with PerfMeter("mqtt.wifi.connecting", self.stats):
+                if self._last_wifi_up:
+                    # only print on transition
+                    print("MQTT: Wi-Fi down; idling")
+                self._last_wifi_up = False
+                self._teardown_client()
+                return
 
         # Wi-Fi is up
         if not self._last_wifi_up:
@@ -253,7 +259,8 @@ class DialMQTT:
         # Build client if needed
         if self._state == self._NEED_BUILD:
             try:
-                self._build_client()
+                with PerfMeter("mqtt._build_client", self.stats):
+                    self._build_client()
             except Exception as e:
                 print("MQTT build error:", e)
                 self._schedule_reconnect(now)
@@ -262,8 +269,13 @@ class DialMQTT:
         # If not connected, connect on schedule
         if self._state in (self._CONNECTING, self._NEED_BUILD):
             if now >= self._next_attempt_at:
-                self._connect_now(now)
-            return
+                with PerfMeter("mqtt.auto_connect", self.stats):
+                    t0 = time.monotonic()
+                    self._connect_now(now)
+                    dt = time.monotonic() - t0
+                    if dt > 0.25:
+                        print("MQTT connect blocked:", dt)
+                return
 
         # Connected: process IO
         if self._client is None:
@@ -271,7 +283,8 @@ class DialMQTT:
             return
 
         try:
-            self._client.loop(self._loop_timeout)
+            with PerfMeter("mqtt._client.loop", self.stats):
+                self._client.loop(self._loop_timeout)
         except Exception as e:
             print("MQTT loop error:", e)
             # Force reconnect on next poll, with backoff

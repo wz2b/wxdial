@@ -22,6 +22,9 @@ from .router import Router
 from wxdial import router
 from .mockmqtt import MockMQTT
 from .dialmqtt import DialMQTT
+from .perf import PerfMeter
+
+stats = {}
 
 class WxDial:
     def __init__(self):
@@ -45,6 +48,7 @@ class WxDial:
         
 
     def run(self):
+        last_stats_print = time.monotonic()
         # Display
         self.display = board.DISPLAY
         # self.root = displayio.Group()
@@ -58,7 +62,10 @@ class WxDial:
         self.mqtt = DialMQTT(broker="ha.autofrog.com",
                              port=8883,
                              client_id="wxdial",
-                             wifimgr=self.wifimgr)
+                             wifimgr=self.wifimgr,
+                             loop_timeout=0.0,      # or 0.01 if 0 is weird
+                             socket_timeout=0.25,
+                             stats=stats)
         
         # Touch IRQ
         self.touch_irq = digitalio.DigitalInOut(board.TOUCH_IRQ)
@@ -107,30 +114,47 @@ class WxDial:
         try:
             while True:
                 now = time.monotonic()
+                current_screen=type(active).__name__
 
-                self.wifimgr.tick(now)
-                self.mqtt.poll(now)
+                # Occasionally print tout stats
+                if now - last_stats_print >= 10.0:
+                    print("--- Performance Stats ---")
+                    for k, v in stats.items():
+                        print(f"{k}: {v:.3f} sec")
+                    print("-------------------------")
+                    stats.clear()
+                    last_stats_print = now
+
+                with PerfMeter("wifi", stats):
+                    self.wifimgr.tick(now)
+                
+                with PerfMeter("mqtt", stats):
+                    self.mqtt.poll(now)
 
                 # A) Emit fake weather events occasionally
-                if now >= next_emit:
-                    # speed in mph-ish, dir degrees
-                    spd = random.uniform(0.0, 25.0)
-                    direction = random.randint(0, 359)
+                # if now >= next_emit:
+                #     # speed in mph-ish, dir degrees
+                #     spd = random.uniform(0.0, 25.0)
+                #     direction = random.randint(0, 359)
 
-                    # publish to router
-                    self.router.publish("weather/wind_spd", spd)
-                    self.router.publish("weather/wind_dir", direction)
+                #     # publish to router
+                #     self.router.publish("weather/wind_spd", spd)
+                #     self.router.publish("weather/wind_dir", direction)
 
-                    # schedule next emit 0.5 .. 2.0 seconds later
-                    next_emit = now + random.uniform(0.5, 2.0)
+                #     # schedule next emit 0.5 .. 2.0 seconds later
+                #     next_emit = now + random.uniform(0.5, 2.0)
 
                 # B) Poll inputs and forward to active screen
-                ev = self.input.poll()
+                with PerfMeter("input", stats):
+                    ev = self.input.poll()
+                
                 if ev:
                     ev_type, ev_value = ev
                     print("EV:", DialInput.event_name(ev_type), ev_value, "ACTIVE:", type(active).__name__, "IDX:", screens.index(active))
                     
-                    handled = active.input(*ev)
+
+                    with PerfMeter(current_screen + ".input", stats):
+                        handled = active.input(*ev)
 
                     if not handled:
                         if ev_type == DialInput.CW:
@@ -148,17 +172,23 @@ class WxDial:
                             prev_index = (screens.index(active) - 1) % len(screens)
                             active = screens[prev_index]
                             self.display.root_group = active
-                            active.on_show()
+                            with PerfMeter(current_screen + ".on_show", stats):
+                                active.on_show()
 
                 # C) Tick screen (always)
-                active.tick(now)
+                with PerfMeter(current_screen + ".tick", stats):
+                    active.tick(now)
+                
                 time.sleep(0.01)
 
                 # D) Handle any routed messages
-                topics = self.mqtt.drain_dirty()
-                if topics:
-                    for topic in topics:
-                        self.router.publish(topic, self.mqtt.get(topic))
+                with PerfMeter("mqtt.dispatch", stats):
+                    topics = self.mqtt.drain_dirty()
+                    if topics:
+                        for topic in topics:
+                            self.router.publish(topic, self.mqtt.get(topic))
+                
+                
 
 
         finally:
