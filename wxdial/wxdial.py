@@ -63,7 +63,7 @@ class WxDial:
                              port=8883,
                              client_id="wxdial",
                              wifimgr=self.wifimgr,
-                             loop_timeout=0.0,      # or 0.01 if 0 is weird
+                             loop_timeout=0.25,      # or 0.01 if 0 is weird
                              socket_timeout=0.25,
                              stats=stats)
         
