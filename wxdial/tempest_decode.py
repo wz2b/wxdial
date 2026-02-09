@@ -12,21 +12,6 @@ except ImportError:
     import json  # type: ignore
 
 
-from .tempest_topics import (
-    topic,
-    SUPPORTED_SUFFIXES,
-    T_WIND_LULL_MPH, T_WIND_SPEED_MPH, T_WIND_GUST_MPH, T_WIND_DIR_DEG, T_WIND_SAMPLE_INTERVAL_S,
-    T_PRESSURE_INHG, T_TEMP_C, T_TEMP_F, T_RH, T_LUX, T_UV_INDEX, T_LIGHT_WM2,
-    T_RAIN_PREV_MIN_MM, T_RAIN_PREV_MIN_IN, T_RAIN_RATE_IN_PER_HR,
-    T_PRECIP_TYPE, T_LIGHTNING_STRIKE_AVG_DISTANCE_MI, T_LIGHTNING_STRIKE_COUNT,
-    T_BATTERY_V, T_REPORT_INTERVAL_MIN,
-    T_OBS_TIME_EPOCH, T_DEVICE_TIME_EPOCH, T_HUB_TIME_EPOCH,
-    T_DEVICE_UPTIME_S, T_DEVICE_VOLTAGE_V, T_DEVICE_FIRMWARE_REV, T_DEVICE_RSSI_DBM,
-    T_DEVICE_SENSOR_STATUS, T_DEVICE_DEBUG,
-    T_HUB_UPTIME_S, T_HUB_RSSI_DBM, T_HUB_SEQ, T_HUB_RESET_FLAGS, T_HUB_FIRMWARE_REV,
-    T_HUB_RADIO_STATS, T_HUB_MQTT_STATS,
-    T_DEVICE_SERIAL, T_HUB_SERIAL,
-)
 # --- unit conversions (floats are fine in CircuitPython) ---
 
 _MPS_TO_MPH = 2.23694
@@ -35,10 +20,7 @@ _MM_TO_IN = 1.0 / 25.4
 _KM_TO_MI = 0.621371
 
 
-def decode_tempest_packet(data_bytes, addr, *,
-                          pressure_comp_inhg=0.0,
-                          publish_meta=False,
-                          use_prefix="weather/"):
+def decode_tempest_packet(data_bytes, addr, *, pressure_comp_inhg=0.0):
     """
     Main entry point: parse JSON, dispatch by msg["type"].
 
@@ -63,93 +45,110 @@ def decode_tempest_packet(data_bytes, addr, *,
         return {}
 
     if mtype == "rapid_wind":
-        return decode_rapid_wind(msg, prefix=use_prefix, publish_meta=publish_meta)
+        return decode_rapid_wind(msg)
 
     if mtype == "obs_st":
-        return decode_obs_st(msg, prefix=use_prefix,
-                             pressure_comp_inhg=pressure_comp_inhg,
-                             publish_meta=publish_meta)
+        return decode_obs_st(msg,pressure_comp_inhg=pressure_comp_inhg)
 
     if mtype == "device_status":
-        return decode_device_status(msg, prefix=use_prefix, publish_meta=publish_meta)
+        return decode_device_status(msg)
 
     if mtype == "hub_status":
-        return decode_hub_status(msg, prefix=use_prefix, publish_meta=publish_meta)
+        return decode_hub_status(msg)
 
-    # You mentioned evt_* earlier; easy to add later when you see them on wire
-    # if mtype == "evt_strike": ...
-    # if mtype == "evt_precip": ...
+    if mtype == "evt_strike":
+        return decode_evt_strike(msg)
+
+    if mtype == "evt_precip":
+        return decode_evt_precip(msg)
 
     return {}
 
 
-def decode_rapid_wind(msg, *, prefix="weather/", publish_meta=False):
+def decode_rapid_wind(msg, *, publish_meta=False):
     """
     Example:
-      {"type":"rapid_wind","ob":[epoch_s, speed_mps, dir_deg], "serial_number":"ST-...", "hub_sn":"HB-..."}
+      {"type":"rapid_wind","ob":[epoch_s, speed_mps, dir_deg],
+       "serial_number":"ST-...", "hub_sn":"HB-..."}
     """
     ob = msg.get("ob")
     if not ob or len(ob) < 3:
-        return {}
-
-    epoch_s = ob[0]
-    speed_mps = ob[1]
-    direction_deg = ob[2]
+        return None
 
     out = {
-        prefix + "rapid/time_epoch": epoch_s,
-        prefix + "rapid/wind_speed_mph": speed_mps * _MPS_TO_MPH,
-        prefix + "rapid/wind_dir_deg": direction_deg,
+        "time_epoch": ob[0],
+        "wind_speed_mph": ob[1] * _MPS_TO_MPH,
+        "wind_dir_deg": ob[2],
     }
 
     if publish_meta:
         sn = msg.get("serial_number")
         hub = msg.get("hub_sn")
         if sn is not None:
-            out[prefix + "device/serial_number"] = sn
+            out["device_serial"] = sn
         if hub is not None:
-            out[prefix + "hub/serial_number"] = hub
+            out["hub_serial"] = hub
 
     return out
 
 
-def decode_obs_st(msg, *, prefix="weather/", pressure_comp_inhg=0.0, publish_meta=False):
+def pressure_mbar_to_sea_level(mbar, altitude_m):
+    if altitude_m <= 0:
+        return mbar
+    return mbar * (1.0 - 2.25577e-5 * altitude_m) ** -5.25588
+
+def decode_obs_st(msg, *, altitude_m=0.0, publish_meta=False):
     obs = msg.get("obs")
     if not obs:
-        return {}
+        return None
     row = obs[-1]
     if not row or len(row) < 18:
-        return {}
+        return None
+
+    station_mbar = row[6]
+    sea_level_mbar = pressure_mbar_to_sea_level(station_mbar, altitude_m)
 
     out = {
-        topic(prefix, T_OBS_TIME_EPOCH): row[0],
+        # timestamps
+        "time_epoch": row[0],
 
-        topic(prefix, T_WIND_LULL_MPH): row[1] * _MPS_TO_MPH,
-        topic(prefix, T_WIND_SPEED_MPH): row[2] * _MPS_TO_MPH,
-        topic(prefix, T_WIND_GUST_MPH): row[3] * _MPS_TO_MPH,
-        topic(prefix, T_WIND_DIR_DEG): row[4],
-        topic(prefix, T_WIND_SAMPLE_INTERVAL_S): row[5],
+        # wind (m/s -> mph)
+        "wind_lull_mph": row[1] * _MPS_TO_MPH,
+        "wind_speed_mph": row[2] * _MPS_TO_MPH,
+        "wind_gust_mph": row[3] * _MPS_TO_MPH,
+        "wind_dir_deg": row[4],
+        "wind_sample_interval_s": row[5],
 
-        topic(prefix, T_PRESSURE_INHG): row[6] * _MBAR_TO_INHG + pressure_comp_inhg,
+        # pressure (mbar -> inHg) + comp
+        
+        "pressure_mbar": station_mbar,
+        "pressure_inhg": station_mbar * _MBAR_TO_INHG,
+        "pressure_sea_level_mbar": sea_level_mbar,
+        "pressure_sea_level_inhg": sea_level_mbar * _MBAR_TO_INHG,
 
-        topic(prefix, T_TEMP_C): row[7],
-        topic(prefix, T_TEMP_F): row[7] * 9.0 / 5.0 + 32.0,
+        # temperature
+        "temp_c": row[7],
+        "temp_f": row[7] * 9.0 / 5.0 + 32.0,
 
-        topic(prefix, T_RH): row[8],
-        topic(prefix, T_LUX): row[9],
-        topic(prefix, T_UV_INDEX): row[10],
-        topic(prefix, T_LIGHT_WM2): row[11],
+        # humidity / light
+        "rh": row[8],
+        "lux": row[9],
+        "uv_index": row[10],
+        "light_wm2": row[11],
 
-        topic(prefix, T_RAIN_PREV_MIN_MM): row[12],
-        topic(prefix, T_RAIN_PREV_MIN_IN): row[12] * _MM_TO_IN,
-        topic(prefix, T_RAIN_RATE_IN_PER_HR): row[12] * _MM_TO_IN * 60.0,
+        # rain (mm -> in)
+        "rain_prev_min_mm": row[12],
+        "rain_prev_min_in": row[12] * _MM_TO_IN,
+        "rain_rate_in_per_hr": row[12] * _MM_TO_IN * 60.0,
 
-        topic(prefix, T_PRECIP_TYPE): row[13],
-        topic(prefix, T_LIGHTNING_STRIKE_AVG_DISTANCE_MI): row[14] * _KM_TO_MI,
-        topic(prefix, T_LIGHTNING_STRIKE_COUNT): row[15],
+        # lightning
+        "precip_type": row[13],
+        "lightning_strike_avg_distance_mi": row[14] * _KM_TO_MI,
+        "lightning_strike_count": row[15],
 
-        topic(prefix, T_BATTERY_V): row[16],
-        topic(prefix, T_REPORT_INTERVAL_MIN): row[17],
+        # power / reporting
+        "battery_v": row[16],
+        "report_interval_min": row[17],
     }
 
     if publish_meta:
@@ -157,100 +156,137 @@ def decode_obs_st(msg, *, prefix="weather/", pressure_comp_inhg=0.0, publish_met
         hub = msg.get("hub_sn")
         fw = msg.get("firmware_revision")
         if sn is not None:
-            out[topic(prefix, T_DEVICE_SERIAL)] = sn
+            out["device_serial"] = sn
         if hub is not None:
-            out[topic(prefix, T_HUB_SERIAL)] = hub
+            out["hub_serial"] = hub
         if fw is not None:
-            out[topic(prefix, T_DEVICE_FIRMWARE_REV)] = fw
+            out["device_firmware_revision"] = fw
 
     return out
 
 
-def decode_device_status(msg, *, prefix="weather/", publish_meta=False):
+def decode_device_status(msg, *, publish_meta=False):
     """
     Example:
       {"type":"device_status","timestamp":epoch_s,"uptime":...,"voltage":2.770,
-       "firmware_revision":179,"rssi":-66,"hub_rssi":-56,"sensor_status":655871,"debug":0,
+       "firmware_revision":179,"rssi":-66,"hub_rssi":-56,
+       "sensor_status":655871,"debug":0,
        "serial_number":"ST-...","hub_sn":"HB-..."}
     """
     out = {}
 
     ts = msg.get("timestamp")
     if ts is not None:
-        out[prefix + "device/time_epoch"] = ts
+        out["time_epoch"] = ts
 
-    # These are already in "human" units (volts, dBm, seconds)
-    for k_in, k_out in (
-        ("uptime", "device/uptime_s"),
-        ("voltage", "device/voltage_v"),
-        ("firmware_revision", "device/firmware_revision"),
-        ("rssi", "device/rssi_dbm"),
-        ("hub_rssi", "hub/rssi_dbm"),
-        ("sensor_status", "device/sensor_status"),
-        ("debug", "device/debug"),
+    for k in (
+        "uptime",
+        "voltage",
+        "firmware_revision",
+        "rssi",
+        "hub_rssi",
+        "sensor_status",
+        "debug",
     ):
-        v = msg.get(k_in)
+        v = msg.get(k)
         if v is not None:
-            out[prefix + k_out] = v
+            out[k] = v
 
     if publish_meta:
         sn = msg.get("serial_number")
         hub = msg.get("hub_sn")
         if sn is not None:
-            out[prefix + "device/serial_number"] = sn
+            out["device_serial"] = sn
         if hub is not None:
-            out[prefix + "hub/serial_number"] = hub
+            out["hub_serial"] = hub
 
-    return out
+    return out or None
 
 
-def decode_hub_status(msg, *, prefix="weather/", publish_meta=False):
+def decode_hub_status(msg, *, publish_meta=False):
     """
     Example:
       {"type":"hub_status","timestamp":epoch_s,"uptime":...,"rssi":-41,
        "reset_flags":"PIN,SFT,HRDFLT","seq":...,
-       "radio_stats":[25,1,0,3,30876],"mqtt_stats":[80,2],
-       "serial_number":"HB-...","firmware_revision":"194"}
+       "radio_stats":[25,1,0,3,30876],
+       "mqtt_stats":[80,2],
+       "serial_number":"HB-...",
+       "firmware_revision":"194"}
     """
     out = {}
 
     ts = msg.get("timestamp")
     if ts is not None:
-        out[prefix + "hub/time_epoch"] = ts
+        out["time_epoch"] = ts
 
-    for k_in, k_out in (
-        ("uptime", "hub/uptime_s"),
-        ("rssi", "hub/rssi_dbm"),
-        ("seq", "hub/seq"),
-        ("reset_flags", "hub/reset_flags"),
-        ("firmware_revision", "hub/firmware_revision"),
+    for k in (
+        "uptime",
+        "rssi",
+        "seq",
+        "reset_flags",
+        "firmware_revision",
     ):
-        v = msg.get(k_in)
+        v = msg.get(k)
         if v is not None:
-            out[prefix + k_out] = v
+            out[k] = v
 
-    # Optional stats arrays (keep raw + maybe also split fields)
     rs = msg.get("radio_stats")
     if isinstance(rs, list):
-        out[prefix + "hub/radio_stats"] = rs
-        # If you want individual fields, uncomment and name them:
-        # if len(rs) >= 5:
-        #     out[prefix + "hub/radio/reboots"] = rs[0]
-        #     out[prefix + "hub/radio/i2c_errors"] = rs[1]
-        #     out[prefix + "hub/radio/whatever2"] = rs[2]
-        #     out[prefix + "hub/radio/whatever3"] = rs[3]
-        #     out[prefix + "hub/radio/whatever4"] = rs[4]
+        out["radio_stats"] = rs
 
     ms = msg.get("mqtt_stats")
     if isinstance(ms, list):
-        out[prefix + "hub/mqtt_stats"] = ms
+        out["mqtt_stats"] = ms
 
     if publish_meta:
         sn = msg.get("serial_number")
         if sn is not None:
-            out[prefix + "hub/serial_number"] = sn
+            out["hub_serial"] = sn
+
+    return out or None
+
+
+
+def decode_evt_strike(msg):
+    """
+    Example:
+      {"type":"evt_strike","evt":[epoch_s, distance_km, energy], ...}
+    """
+    evt = msg.get("evt")
+    if not evt or len(evt) < 3:
+        return None
+
+    out = {
+        "time_epoch": evt[0],
+        "distance_mi": evt[1] * _KM_TO_MI,
+        "energy": evt[2],
+    }
+
+    # Optional accumulated count if present
+    count = msg.get("count")
+    if count is not None:
+        out["count"] = count
 
     return out
 
 
+def decode_evt_precip(msg):
+    """
+    Example:
+      {"type":"evt_precip","evt":[epoch_s], ...}
+    """
+    evt = msg.get("evt")
+    if not evt or len(evt) < 1:
+        return None
+
+    out = {
+        "rain_began_epoch": evt[0],
+    }
+
+    # Optional accumulated count if present
+    count = msg.get("count")
+    if count is not None:
+        out["count"] = count
+
+    return out
 
