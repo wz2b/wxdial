@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Deploy to M5Dial (D:)",
+      "type": "shell",
+      "command": "robocopy",
+      "args": [
+        "${workspaceFolder}",
+        "D:\\",
+        "/E",
+        "/XO",
+        "/XN",
+        "/XC",
+        "/R:0",
+        "/W:0",
+        "/NFL",
+        "/NDL",
+        "/NJH",
+        "/NJS",
+        "/NP",
+        "/XD", ".git", ".vscode", "__pycache__", "venv", ".venv", "build", "dist", "node_modules",
+        "/XF", "*.pyc", "*.pyo", "*.tmp", "*.log"
+      ],
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "Deploy to M5Dial (E:)",
+      "type": "shell",
+      "command": "robocopy",
+      "args": [
+        "${workspaceFolder}",
+        "E:\\",
+        "/E",
+        "/XO",
+        "/XN",
+        "/XC",
+        "/R:0",
+        "/W:0",
+        "/NFL",
+        "/NDL",
+        "/NJH",
+        "/NJS",
+        "/NP",
+        "/XD", ".git", ".vscode", "__pycache__", "venv", ".venv", "build", "dist", "node_modules",
+        "/XF", "*.pyc", "*.pyo", "*.tmp", "*.log"
+      ],
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}

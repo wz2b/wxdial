@@ -1,0 +1,19 @@
+{
+  
+  "version": "2.0.0",
+  "VsCodeTaskButtons.tasks": [
+    {
+      "label": "🚀D:",
+      "task": "Deploy to M5Dial (D:)",
+      "tooltip": "Copy updated files to the M5Dial",
+      "icon": "rocket"
+    },
+    {
+      "label": "🚀 E:",
+      "task": "Deploy to M5Dial (E:)",
+      "tooltip": "Copy updated files to the M5Dial",
+      "icon": "rocket"
+    }    
+  ]
+}
+
