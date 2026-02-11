@@ -10,6 +10,15 @@ class WxEvent:
         self.type = type      # "obs" | "rapid" | "device" | "hub" | ...
         self.data = data      # dict payload
         self.ts = ts          # monotonic() or unix; your call
+
+    def __getattr__(self, name):
+        # Only called if normal attribute lookup fails
+        try:
+            return self.data[name]
+        except KeyError:
+            raise AttributeError(
+                "WxEvent has no attribute {!r}".format(name)
+
     def __repr__(self):
         return f"<WxEvent type={self.type!r} data_keys={list(self.data.keys()) if isinstance(self.data, dict) else type(self.data)}>"
 
