@@ -4,6 +4,7 @@ import terminalio
 from ..input import DialInput
 from .screen import Screen
 from ..subscribe import subscribe
+from ..tempest_event import subscribewx
 from adafruit_display_text import label
 from ..widgets import WindRoseWidget, SpiderWebGrid
 import random
@@ -56,14 +57,26 @@ class WindRoseScreen(Screen):
             wind_dir_deg=data['wind_dir']
         )
 
-    @subscribe("weather/gust")
-    def on_gust(self, payload):
-        data = json.loads(payload)
-        self.rose.append_sample(
-            wind_speed_mph=data['wind_speed_avg'],
-            wind_gust_mph=data['wind_gust_mph'],
-            wind_dir_deg=data['wind_gust_dir']
-        )
+    # @subscribe("weather/gust")
+    # def on_gust(self, payload):
+    #     data = json.loads(payload)
+    #     self.rose.append_sample(
+    #         wind_speed_mph=data['wind_speed_avg'],
+    #         wind_gust_mph=data['wind_gust_mph'],
+    #         wind_dir_deg=data['wind_gust_dir']
+    #     )
+
+
+    @subscribewx()
+    def on_weather(self, payload):
+        if payload.type == "rapid_wind":
+            d = payload.data  # or payload.payload / payload.fields — see below
+            self.rose.append_sample(
+                wind_speed_mph=d["wind_speed_mph"],
+                wind_dir_deg=d["wind_dir_deg"],
+            )
+        else:
+            print("other weather event:", payload.type)
 
 
     def tick(self, now):

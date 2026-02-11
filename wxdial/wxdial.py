@@ -6,8 +6,13 @@ import busio
 import digitalio
 import random
 
+from wxdial.tempest_decode import TempestUdpDecoder
+from wxdial.tempest_event import _WX_LISTENERS, dispatch_wx_event, register_wx
+
 from .wifi_mgr import WifiManager
 from wxdial.mockmqtt import MockMQTT
+from wxdial.tempest_udp import WxFlowUdp
+
 
 from .screens.hello import GreetingScreen
 from .screens.weather import WeatherScreen
@@ -57,15 +62,27 @@ class WxDial:
 
         # WiFi Manager
         self.wifimgr.startup()
-        
+
+        # UDP listener
+        print("Creating UDP listener")
+        self.udp = WxFlowUdp(
+            pool=self.wifimgr.new_socket_pool(),
+            listen_port=50222,
+            buffer_size=2048,
+            max_packets_per_poll=16,
+            decoder=TempestUdpDecoder(altitude_m=0.0, publish_meta=True)
+        )
+        self.udp.connect()
+
+
         # self.mqtt = MockMQTT(emissions)
-        self.mqtt = DialMQTT(broker="ha.autofrog.com",
-                             port=8883,
-                             client_id="wxdial",
-                             wifimgr=self.wifimgr,
-                             loop_timeout=0.25,      # or 0.01 if 0 is weird
-                             socket_timeout=0.25,
-                             stats=stats)
+        # self.mqtt = DialMQTT(broker="ha.autofrog.com",
+        #                      port=8883,
+        #                      client_id="wxdial",
+        #                      wifimgr=self.wifimgr,
+        #                      loop_timeout=0.25,      # or 0.01 if 0 is weird
+        #                      socket_timeout=0.25,
+        #                      stats=stats)
         
         # Touch IRQ
         self.touch_irq = digitalio.DigitalInOut(board.TOUCH_IRQ)
@@ -90,12 +107,18 @@ class WxDial:
 
         # Register screens (or widgets) with router
         # If your @subscribe methods live on the Screen classes, this is enough:
+        # from wxdial.tempest_event import register_wx, _WX_LISTENERS
+
         for s in screens:
             self.router.register(s)
+            n=register_wx(s)
+            # print("register_wx", type(s).__name__, "->", n)
+        # print("TOTAL WX LISTENERS:", len(_WX_LISTENERS))
+
 
         # Tell the MQTT boker we're interested in these topics
-        for topic in self.router.topics():
-            self.mqtt.subscribe(topic)
+        # for topic in self.router.topics():
+        #     self.mqtt.subscribe(topic)
 
         # If your @subscribe methods live on widgets owned by each screen,
         # register those widgets here instead (example):
@@ -128,8 +151,8 @@ class WxDial:
                 with PerfMeter("wifi", stats):
                     self.wifimgr.tick(now)
                 
-                with PerfMeter("mqtt", stats):
-                    self.mqtt.poll(now)
+                # with PerfMeter("mqtt", stats):
+                #     self.mqtt.poll(now)
 
                 # A) Emit fake weather events occasionally
                 # if now >= next_emit:
@@ -182,13 +205,21 @@ class WxDial:
                 time.sleep(0.01)
 
                 # D) Handle any routed messages
-                with PerfMeter("mqtt.dispatch", stats):
-                    topics = self.mqtt.drain_dirty()
-                    if topics:
-                        for topic in topics:
-                            self.router.publish(topic, self.mqtt.get(topic))
+                # with PerfMeter("mqtt.dispatch", stats):
+                #     topics = self.mqtt.drain_dirty()
+                #     if topics:
+                #         for topic in topics:
+                #             self.router.publish(topic, self.mqtt.get(topic))
                 
                 
+                # A) UDP ingest (non-blocking)
+                with PerfMeter("wx.poll", stats):
+                    events = self.udp.poll()
+                with PerfMeter("wx.dispatch", stats):
+                    for ev in events:
+                        # print("dispatching", ev)
+                        called=dispatch_wx_event(ev)
+                        print("Successfully dispatched to", called, "listeners")
 
 
         finally:

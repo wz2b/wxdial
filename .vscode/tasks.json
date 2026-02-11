@@ -19,7 +19,7 @@
         "/NJH",
         "/NJS",
         "/NP",
-        "/XD", ".git", ".vscode", "__pycache__", "venv", ".venv", "build", "dist", "node_modules",
+        "/XD", ".git", ".vscode", "__pycache__", "venv", ".venv", "build", "dist", "node_modules", "public",
         "/XF", "*.pyc", "*.pyo", "*.tmp", "*.log"
       ],
       "problemMatcher": [],
@@ -43,7 +43,7 @@
         "/NJH",
         "/NJS",
         "/NP",
-        "/XD", ".git", ".vscode", "__pycache__", "venv", ".venv", "build", "dist", "node_modules",
+        "/XD", ".git", ".vscode", "__pycache__", "venv", ".venv", "build", "dist", "node_modules", "public",
         "/XF", "*.pyc", "*.pyo", "*.tmp", "*.log"
       ],
       "problemMatcher": [],
