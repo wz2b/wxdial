@@ -16,6 +16,7 @@ class WindRoseScreen(Screen):
         super().__init__()
 
         self.rose = WindRoseWidget(cx=self.cx, cy=self.cy, radius=110,
+                                        history_len=150,
                                         dir_step_deg=30,
                                         bands=5,
                                         draw_grid=True)
@@ -49,13 +50,13 @@ class WindRoseScreen(Screen):
         return False
 
     
-    @subscribe("weather/wind")
-    def on_wind(self, payload):
-        data = json.loads(payload)
-        self.rose.append_sample(
-            wind_speed_mph=data['wind_speed_mph'],
-            wind_dir_deg=data['wind_dir']
-        )
+    # @subscribe("weather/wind")
+    # def on_wind(self, payload):
+    #     data = json.loads(payload)
+    #     self.rose.append_sample(
+    #         wind_speed_mph=data['wind_speed_mph'],
+    #         wind_dir_deg=data['wind_dir']
+    #     )
 
     # @subscribe("weather/gust")
     # def on_gust(self, payload):
@@ -70,6 +71,7 @@ class WindRoseScreen(Screen):
     @subscribewx()
     def on_weather(self, payload):
         if payload.type == "rapid_wind":
+            print("wind")
             d = payload.data  # or payload.payload / payload.fields — see below
             self.rose.append_sample(
                 wind_speed_mph=d["wind_speed_mph"],
