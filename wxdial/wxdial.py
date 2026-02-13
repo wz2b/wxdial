@@ -27,9 +27,8 @@ from .router import Router
 from wxdial import router
 from .mockmqtt import MockMQTT
 from .dialmqtt import DialMQTT
-from .perf import PerfMeter
-
-stats = {}
+from .perf_state import stats
+from .perf import PerfMeter, print_perf
 
 class WxDial:
     def __init__(self):
@@ -141,10 +140,7 @@ class WxDial:
 
                 # Occasionally print tout stats
                 if now - last_stats_print >= 10.0:
-                    print("--- Performance Stats ---")
-                    for k, v in stats.items():
-                        print(f"{k}: {v:.3f} sec")
-                    print("-------------------------")
+                    print_perf(stats)
                     stats.clear()
                     last_stats_print = now
 
@@ -217,12 +213,10 @@ class WxDial:
                 
                 # A) UDP ingest (non-blocking)
                 with PerfMeter("wx.poll", stats):
-                    events = self.udp.poll()
-                with PerfMeter("wx.dispatch", stats):
-                    for ev in events:
-                        # print("dispatching", ev)
-                        called=dispatch_wx_event(ev)
-                        print("Successfully dispatched to", called, "listeners")
+                    event = self.udp.poll_one(now)
+
+                if event is not None:
+                    dispatch_wx_event(event)
 
 
         finally:

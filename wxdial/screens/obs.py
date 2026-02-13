@@ -41,9 +41,6 @@ class ObsScreen(Screen):
     def _build_waiting_layer(self):
         g = Group()
 
-
-
-
         text_nodata = label.Label(
             terminalio.FONT,
             text="No data yet",

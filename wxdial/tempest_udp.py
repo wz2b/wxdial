@@ -2,6 +2,8 @@
 import time
 from wxdial.tempest_event import WxEvent
 from wxdial.tempest_decode import TempestUdpDecoder
+from .perf_state import stats
+from .perf import PerfMeter
 
 class WxFlowUdp:
     """
@@ -36,6 +38,7 @@ class WxFlowUdp:
             return
         sock = self._pool.socket(self._pool.AF_INET, self._pool.SOCK_DGRAM)
         sock.setblocking(False)
+        sock.settimeout(0)
         sock.bind(("0.0.0.0", self._listen_port))
         self._sock = sock
 
@@ -49,18 +52,19 @@ class WxFlowUdp:
 
     def poll(self):
             if not self._sock:
-                return []
+                return None
 
-            events = []
-            packets = 0
 
             while packets < self._max_packets:
                 try:
-                    nbytes, addr = self._sock.recvfrom_into(self._buffer)
+                    with PerfMeter("recvfrom_into", stats):
+                        nbytes, addr = self._sock.recvfrom_into(self._buffer)
                 except OSError:
-                    break
+                    return []
+                    # break
 
                 if not nbytes:
+                    return []
                     break
 
                 data = self._buffer[:nbytes]
@@ -79,3 +83,25 @@ class WxFlowUdp:
                 packets += 1
 
             return events
+
+    def poll_one(self, now):
+            if not self._sock:
+                return None
+
+            with PerfMeter("recvfrom_into", stats):
+                try:
+                    nbytes, addr = self._sock.recvfrom_into(self._buffer)
+                except OSError as e:
+                    return None
+
+            if not nbytes:
+                return None
+
+            # (use memoryview here ideally)
+            data = self._buffer[:nbytes]
+            decoded = self._decoder.decode(data, addr)
+            if decoded is None:
+                return None
+
+            mtype, payload = decoded
+            return WxEvent(mtype, payload, ts=now)
