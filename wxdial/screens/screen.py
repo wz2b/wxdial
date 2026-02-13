@@ -70,3 +70,8 @@ class Screen(displayio.Group):
         'now' should be time.monotonic() from the app.
         """
         pass
+
+    def refresh(self):
+        for child in self:
+            if hasattr(child, "refresh"):
+                child.refresh()

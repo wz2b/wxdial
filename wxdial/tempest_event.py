@@ -17,7 +17,7 @@ class WxEvent:
             return self.data[name]
         except KeyError:
             raise AttributeError(
-                "WxEvent has no attribute {!r}".format(name)
+                "WxEvent has no attribute {!r}".format(name))
 
     def __repr__(self):
         return f"<WxEvent type={self.type!r} data_keys={list(self.data.keys()) if isinstance(self.data, dict) else type(self.data)}>"

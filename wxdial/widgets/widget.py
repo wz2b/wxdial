@@ -110,6 +110,9 @@ class Widget(displayio.Group):
         self._dirty = 0
         return True
 
+    def tick(self, now):
+        pass
+    
     def _render(self, dirty_flags):
         """
         Subclasses override this. dirty_flags indicates what changed.

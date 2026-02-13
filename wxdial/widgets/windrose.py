@@ -198,7 +198,9 @@ class WindRoseWidget(Widget):
         if reset_scale:
             self._current_scale_idx = 0
             if self._grid:
-                self._grid
+                self._grid.set_scale(
+                    max_speed_mph=self._scale_ranges[self._current_scale_idx]
+                )
 
     def append_sample(self, *, wind_speed_mph=None, wind_dir_deg=None, wind_gust_mph=None):
         """

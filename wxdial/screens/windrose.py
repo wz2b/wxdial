@@ -71,14 +71,11 @@ class WindRoseScreen(Screen):
     @subscribewx()
     def on_weather(self, payload):
         if payload.type == "rapid_wind":
-            print("wind")
             d = payload.data  # or payload.payload / payload.fields — see below
             self.rose.append_sample(
                 wind_speed_mph=d["wind_speed_mph"],
                 wind_dir_deg=d["wind_dir_deg"],
             )
-        else:
-            print("other weather event:", payload.type)
 
 
     def tick(self, now):

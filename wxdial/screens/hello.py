@@ -56,7 +56,7 @@ class GreetingScreen(Screen):
     
     def tick(self, now):
         # Animate current sprite
-        self.icon.animate()
+        self.icon.tick()
 
 
 

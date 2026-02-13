@@ -16,7 +16,7 @@ from wxdial.tempest_udp import WxFlowUdp
 
 from .screens.hello import GreetingScreen
 from .screens.weather import WeatherScreen
-from .screens.wind import WindScreen
+from .screens.obs import ObsScreen
 from .screens.network import NetworkScreen
 from .screens.windrose import WindRoseScreen
 
@@ -99,7 +99,7 @@ class WxDial:
         # Screens
         rose = WindRoseScreen()
         greeting = GreetingScreen()
-        wind = WindScreen()
+        wind = ObsScreen()
         weather = WeatherScreen()
         network = NetworkScreen(wifimgr=self.wifimgr)
 
@@ -201,6 +201,9 @@ class WxDial:
                 # C) Tick screen (always)
                 with PerfMeter(current_screen + ".tick", stats):
                     active.tick(now)
+                
+                with PerfMeter(current_screen + ".refresh", stats):
+                    active.refresh()
                 
                 time.sleep(0.01)
 
