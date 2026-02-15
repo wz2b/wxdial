@@ -97,12 +97,12 @@ class WxDial:
 
         # Screens
         rose = WindRoseScreen()
-        greeting = GreetingScreen()
-        wind = ObsScreen()
+        # greeting = GreetingScreen()
+        obs = ObsScreen()
         weather = WeatherScreen()
         network = NetworkScreen(wifimgr=self.wifimgr)
 
-        screens = [rose, greeting, wind, weather, network]
+        screens = [obs, rose, weather, network]
 
         # Register screens (or widgets) with router
         # If your @subscribe methods live on the Screen classes, this is enough:
@@ -217,6 +217,7 @@ class WxDial:
 
                 if event is not None:
                     dispatch_wx_event(event)
+
 
 
         finally:

@@ -79,7 +79,7 @@ class WxIcon(IconAnimWidget):
     is inherited from IconAnimWidget.
     """
 
-    def __init__(self, *, cx, cy, t, icon_path=None, code=None, tile_w=64, tile_h=64, visible=True):
+    def __init__(self, *, cx, cy, t, icon_path=None, code=None, tile_w=96, tile_h=96, visible=True):
         """
         Params:
           cx, cy: center position
@@ -118,26 +118,21 @@ class WxIcon(IconAnimWidget):
         code_changed = (code != old_code)
         path_changed = (new_path != old_path)
 
-        # Always record latest code
+        # Always update both code and path for consistency
         self._code = code
+        self._icon_path = new_path
 
         # Decide whether we will reload the asset
         will_reload = force_reload or path_changed
-
-        # Print behavior:
-        # - Print when code changed (your use-case)
-        # - Mark whether asset changed
-        if verbose and code_changed:
-            tag = "(new asset)" if path_changed else "(same asset)"
-            print(code, new_path, tag)
 
         # If we don't need to reload, we're done
         if not will_reload:
             return False
 
-        # Commit the new asset path and reload
-        self._icon_path = new_path
+        # Reload the asset
+        print("--> WxIcon: code changed:", code_changed, "path changed:", path_changed, "loading new path:", new_path)
         super().set_path(new_path, reset=reset)
+        self.refresh(force=True)  # force refresh to update the new asset immediately
         return True
 
 

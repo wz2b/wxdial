@@ -21,7 +21,7 @@ class WxFlowUdp:
         *,
         listen_port=50222,
         decoder=None,
-        buffer_size=1024,
+        buffer_size=512,
         max_packets_per_poll=8,
         altitude_m=0.0
     ):
@@ -50,40 +50,6 @@ class WxFlowUdp:
                 pass
         self._sock = None
 
-    def poll(self):
-            if not self._sock:
-                return None
-
-
-            while packets < self._max_packets:
-                try:
-                    with PerfMeter("recvfrom_into", stats):
-                        nbytes, addr = self._sock.recvfrom_into(self._buffer)
-                except OSError:
-                    return []
-                    # break
-
-                if not nbytes:
-                    return []
-                    break
-
-                data = self._buffer[:nbytes]
-
-                try:
-                    decoded = self._decoder.decode(data, addr)
-                except Exception:
-                    decoded = None
-
-                if decoded is None:
-                    packets += 1
-                    continue
-
-                mtype, payload = decoded
-                events.append(WxEvent(mtype, payload, ts=time.monotonic()))
-                packets += 1
-
-            return events
-
     def poll_one(self, now):
             if not self._sock:
                 return None
@@ -93,7 +59,7 @@ class WxFlowUdp:
                     nbytes, addr = self._sock.recvfrom_into(self._buffer)
                 except OSError as e:
                     return None
-
+            
             if not nbytes:
                 return None
 

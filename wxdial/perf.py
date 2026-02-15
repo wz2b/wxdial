@@ -1,3 +1,4 @@
+import gc
 import time
 
 class PerfMeter:
@@ -42,5 +43,6 @@ def print_perf(stats):
         else:
             # fallback if you still have old float entries
             print(f"{name}: {row}")
+    print("mem_free:", gc.mem_free())
     print("-------------------------")
 

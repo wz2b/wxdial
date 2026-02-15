@@ -259,12 +259,11 @@ class IconAnimWidget(Widget):
         self.t = float(t)
         self._next_time = time.monotonic() + self.t
 
-    def tick(self):
+    def tick(self, now):
         # Nothing displayed → nothing to animate
         if self.tg is None:
             return False
 
-        now = time.monotonic()
         if now < self._next_time:
             return False
 

@@ -11,6 +11,8 @@ from ..widgets import WindDialWidget
 from ..widgets import TempText
 import random
 from adafruit_bitmap_font import bitmap_font
+from ..widgets.wx_icon import WxIcon
+
 
 class ObsScreen(Screen):
     def __init__(self):
@@ -22,9 +24,19 @@ class ObsScreen(Screen):
         temp_font = bitmap_font.load_font("/public/fonts/FreeSansBold24.pcf")
         temp_font.load_glyphs("0123456789-°.FC".encode("utf-8"))
         
+        self.icon = WxIcon(
+            cx=self.cx,
+            cy=self.cy - 56,
+            t=0.150,
+            icon_path="/wxdial/sprites",
+            tile_h=120,
+            tile_w=120,
+        )
+        self.append(self.icon)
+
         self.temp = TempText(
             x=self.cx,
-            y=self.cy,
+            y=self.cy + 5,
             font=temp_font,
         )
         self.append(self.temp)
@@ -77,6 +89,13 @@ class ObsScreen(Screen):
             self.temp.set(value=payload.temp_f)
             print("Temp dirty:", self.temp._dirty)
             self._update_arrow()
+        elif payload.type == "custom":
+            icon = getattr(payload, "wxicon", None)
+            if icon is not None:
+                try:
+                    self.icon.set_code(icon)
+                except Exception as e:
+                    print(f"!!!! Error setting icon: {e}")
 
     def _update_arrow(self):
         self.big_gauge.set(
@@ -86,5 +105,5 @@ class ObsScreen(Screen):
         )
 
     def tick(self, now):
-        # self.temp.tick(now)
-        pass
+        # Animate current sprite
+        self.icon.tick(now)

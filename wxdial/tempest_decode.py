@@ -38,6 +38,10 @@ class TempestUdpDecoder:
             payload = self._decode_evt_strike(msg)
         elif mtype == "evt_precip":
             payload = self._decode_evt_precip(msg)
+        elif mtype == "custom":
+            # Just pass it through undisturbed for now
+            payload = msg
+            payload['type'] = mtype
         else:
             return None
 
