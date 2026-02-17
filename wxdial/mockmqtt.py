@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
+# 
 import time
 
 class MockMQTT:

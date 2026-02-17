@@ -1,4 +1,7 @@
 # wxdial/input.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
+
 from micropython import const
 import time
 import rotaryio

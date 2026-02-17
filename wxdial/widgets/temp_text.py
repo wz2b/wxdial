@@ -1,4 +1,6 @@
 # wxdial/widgets/temp_text.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
 
 import terminalio
 from adafruit_display_text import label

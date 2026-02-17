@@ -1,4 +1,14 @@
+# Copyright
+
+The sprites in this folder are built from the TWC icon image
+set located at
+[https://developer.weather.com/data/default/twc-icon-codes-and-icon-images](https://developer.weather.com/data/default/twc-icon-codes-and-icon-images)
+
+
+
+
 # WXS Sprite Format – Design Rationale and Evolution
+
 
 ## Background
 

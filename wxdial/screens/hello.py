@@ -1,4 +1,6 @@
 # screens/hello.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
 
 from wxdial.tempest_event import subscribewx
 from ..input import DialInput

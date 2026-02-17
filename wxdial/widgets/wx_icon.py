@@ -1,4 +1,7 @@
 # wxdial/widgets/wx_icon.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
+
 #
 # Weather-aware icon widget that maps TWC icon codes
 # to animated sprite assets (.wxs) and delegates rendering

@@ -1,4 +1,7 @@
 # wxdial/weather/tempest_decode.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
+
 import json
 
 _MPS_TO_MPH = 2.23694

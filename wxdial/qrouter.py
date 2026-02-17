@@ -1,4 +1,7 @@
-# wxdial/subscribe.py (append if you want)
+# wxdial/subscribe.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
+
 class QueuedRouter(Router):
     def __init__(self, max_queue=32):
         super().__init__()

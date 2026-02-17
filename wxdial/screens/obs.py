@@ -1,4 +1,6 @@
 # screens/hello.py  (ObsScreen)
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
 
 import terminalio
 from adafruit_display_text import label
@@ -26,9 +28,9 @@ class ObsScreen(Screen):
         
         self.icon = WxIcon(
             cx=self.cx,
-            cy=self.cy - 56,
+            cy=self.cy - 53,
             t=0.150,
-            icon_path="/wxdial/sprites",
+            code=44,
             tile_h=120,
             tile_w=120,
         )

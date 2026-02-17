@@ -1,3 +1,6 @@
+# widgets/__init__.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
 from .widget import Widget
 from .wind import WindDialWidget
 from .windrose import WindRoseWidget

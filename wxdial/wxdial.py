@@ -169,8 +169,6 @@ class WxDial:
                 
                 if ev:
                     ev_type, ev_value = ev
-                    print("EV:", DialInput.event_name(ev_type), ev_value, "ACTIVE:", type(active).__name__, "IDX:", screens.index(active))
-                    
 
                     with PerfMeter(current_screen + ".input", stats):
                         handled = active.input(*ev)
@@ -217,8 +215,6 @@ class WxDial:
 
                 if event is not None:
                     dispatch_wx_event(event)
-
-
 
         finally:
             if self.input:

@@ -1,4 +1,7 @@
 # wxdial/widgets/icon_anim.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
+
 import time
 import struct
 import zlib
@@ -36,7 +39,13 @@ class WXS2Anim:
         self._f = None
         self.bitmap = None
 
+        # Load header FIRST to get tile_w, tile_h, and _offsets
         self._load_header()
+
+        # NOW we can pre-allocate buffers
+        max_compressed = max(ln for _off, ln in self._offsets)
+        self._comp_buffer = bytearray(max_compressed)
+        self._raw_buffer = bytearray(self.tile_w * self.tile_h)
 
         # One-frame bitmap (NOT the whole sheet)
         self.bitmap = displayio.Bitmap(self.tile_w, self.tile_h, self.colors)
@@ -93,28 +102,34 @@ class WXS2Anim:
         # Convert relative -> absolute if needed
         if self._offsets_are_relative:
             off = self._data_start + off
-
-        # Read this frame's compressed blob
+        
+        # Read compressed data into pre-allocated buffer
         self._f.seek(off)
-        comp = self._f.read(ln)
-
-        # Decompress to exactly tile_w*tile_h bytes
+        nbytes = self._f.readinto(memoryview(self._comp_buffer)[:ln])
+        
+        # Decompress into pre-allocated raw buffer
         try:
-            raw = zlib.decompress(comp)
+            import uzlib
+            decomp = uzlib.DecompIO(memoryview(self._comp_buffer)[:nbytes], -15)
+            actual = decomp.readinto(self._raw_buffer)
+            decomp.close()
         except Exception as e:
-            raise ValueError(
-                "Bad zlib frame: frame={} off={} ln={} rel={}".format(
-                    n, off, ln, self._offsets_are_relative
-                )
-            ) from e
-
-        # Fast copy into Bitmap (index data)
-        # raw must be bytes/bytearray length = tile_w * tile_h
-        bitmaptools.arrayblit(self.bitmap, raw, 0, 0, self.tile_w, self.tile_h)
-
-        # Help GC a bit (CircuitPython can be tight)
-        comp = None
-        raw = None
+            # Fallback to regular zlib with GC
+            gc.collect()
+            try:
+                raw = zlib.decompress(memoryview(self._comp_buffer)[:nbytes])
+                self._raw_buffer[:len(raw)] = raw
+                raw = None
+                gc.collect()
+            except Exception as e2:
+                raise ValueError(
+                    "Bad zlib frame: frame={} off={} ln={} rel={}".format(
+                        n, off, ln, self._offsets_are_relative
+                    )
+                ) from e2
+        
+        # Copy into bitmap
+        bitmaptools.arrayblit(self.bitmap, self._raw_buffer, 0, 0, self.tile_w, self.tile_h)
 
     def deinit(self):
         if self._f is not None:
@@ -162,6 +177,8 @@ class IconAnimWidget(Widget):
 
         self.set_path(path, reset=True)
 
+        self._animate = False  
+
     def _clear(self):
         """Remove any displayed icon and release references."""
         if self.tg is not None:
@@ -205,6 +222,7 @@ class IconAnimWidget(Widget):
         p = path.lower()
         if p.endswith(".wxs"):
             # WXS2: small RAM footprint, load frames on demand
+            self._clear()
             self._wxs2 = WXS2Anim(path)
             self.frames = self._wxs2.frames
             tw = self._wxs2.tile_w
@@ -260,6 +278,9 @@ class IconAnimWidget(Widget):
         self._next_time = time.monotonic() + self.t
 
     def tick(self, now):
+        if not self._animate:
+          return False
+        
         # Nothing displayed → nothing to animate
         if self.tg is None:
             return False

@@ -1,4 +1,6 @@
 # wxdial/subscribe.py
+# SPDX-FileCopyrightText: Copyright (c) 2026 Christopher Piggott
+# SPDX-License-Identifier: MIT
 
 DEBUG = True
 
